@@ -93,7 +93,57 @@ The application uses the following MySQL tables:
    ```
 
 3. **Access the website:**
-   - Open your browser and go to: `http://localhost:3000`
+   - Open your browser and go to: `http://localhost:3001` (local development)
+
+## Deployment
+
+### Deploy to Render (Free Hosting)
+
+1. **Push to GitHub:**
+   ```bash
+   git add .
+   git commit -m "Ready for deployment"
+   git push origin main
+   ```
+
+2. **Deploy on Render:**
+   - Go to [render.com](https://render.com)
+   - Sign up with GitHub
+   - Click "New +" → "Web Service"
+   - Connect your `raddison-salon` repository
+   - Configure:
+     - **Name**: `raddison-salon`
+     - **Environment**: `Node`
+     - **Build Command**: `npm install`
+     - **Start Command**: `npm start`
+   
+3. **Add Environment Variables:**
+   In Render dashboard, add these environment variables:
+   ```
+   DB_HOST=brprneky7bxh6iiqekb7-mysql.services.clever-cloud.com
+   DB_USER=uc70lxp4kny2nixb
+   DB_PASSWORD=qOh414XT6j8nvqG8wuu3
+   DB_NAME=brprneky7bxh6iiqekb7
+   DB_PORT=3306
+   ```
+
+4. **Deploy**: Click "Create Web Service"
+
+Your site will be live at: `https://raddison-salon.onrender.com`
+
+### Alternative: Deploy to Vercel
+
+1. **Install Vercel CLI:**
+   ```bash
+   npm install -g vercel
+   ```
+
+2. **Deploy:**
+   ```bash
+   vercel
+   ```
+
+3. **Set Environment Variables** in Vercel dashboard
 
 ## API Endpoints
 

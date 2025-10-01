@@ -3,6 +3,7 @@ const mysql = require('mysql2');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const path = require('path');
+const fs = require('fs');
 require('dotenv').config();
 
 const app = express();
@@ -12,7 +13,11 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, 'public')));
+
+// Serve static files with proper path handling
+const publicPath = path.join(__dirname, 'public');
+console.log('Serving static files from:', publicPath);
+app.use(express.static(publicPath));
 
 // MySQL Database Connection
 const db = mysql.createConnection({
@@ -20,19 +25,39 @@ const db = mysql.createConnection({
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME,
-    port: process.env.DB_PORT || 3306
+    port: process.env.DB_PORT || 3306,
+    connectTimeout: 60000
 });
 
 // Connect to database
 db.connect((err) => {
     if (err) {
         console.error('Database connection failed:', err);
+        console.error('Connection details:');
+        console.error('Host:', process.env.DB_HOST);
+        console.error('User:', process.env.DB_USER);
+        console.error('Database:', process.env.DB_NAME);
+        console.error('Port:', process.env.DB_PORT || 3306);
         return;
     }
-    console.log('Connected to MySQL database');
+    console.log('Connected to MySQL database successfully!');
+    console.log('Database:', process.env.DB_NAME);
 });
 
 // Routes
+
+// Health check route
+app.get('/health', (req, res) => {
+    const publicDir = path.join(__dirname, 'public');
+    const files = fs.existsSync(publicDir) ? fs.readdirSync(publicDir) : ['public directory not found'];
+    res.json({
+        status: 'OK',
+        timestamp: new Date().toISOString(),
+        directory: __dirname,
+        publicPath: publicDir,
+        files: files
+    });
+});
 
 // Get all services
 app.get('/api/services', (req, res) => {
@@ -208,7 +233,22 @@ app.get('/api/available-slots', (req, res) => {
 
 // Serve the main page
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    const indexPath = path.join(__dirname, 'public', 'index.html');
+    console.log('Looking for index.html at:', indexPath);
+    
+    // Check if file exists
+    const fs = require('fs');
+    if (fs.existsSync(indexPath)) {
+        res.sendFile(indexPath);
+    } else {
+        console.error('index.html not found at:', indexPath);
+        res.status(404).send(`
+            <h1>File Not Found</h1>
+            <p>Looking for: ${indexPath}</p>
+            <p>Directory contents:</p>
+            <pre>${fs.readdirSync(__dirname).join('\n')}</pre>
+        `);
+    }
 });
 
 // Start server
