@@ -46,6 +46,54 @@ Welcome to **Raddison Salon**, a modern and elegant web-based salon management s
 
 <br>
 
+---
+
+## 📸 Screenshots
+
+### Homepage
+![Home Page](screenshots/home_page.png)
+*Welcome page featuring our elegant pastel-themed design with salon introduction and call-to-action*
+
+### Services
+![Services Page 1](screenshots/services_1.png)
+*Browse through our comprehensive collection of regular beauty services with detailed descriptions and pricing*
+
+![Services Page 2](screenshots/services_2.png)
+*Premium luxury services section showcasing our exclusive spa and treatment packages fetched live from database*
+
+### Book Appointment
+![Appointment Booking](screenshots/appointment.png)
+*Easy-to-use appointment booking form with customer details, service selection, and preferred time slots*
+
+### About Us
+![About Us Section 1](screenshots/about_us_1.png)
+*Learn about Raddison Salon's story, mission, and commitment to beauty excellence*
+
+![About Us Section 2](screenshots/about_us_2.png)
+*Meet our professional team (data is fetched directly from database not hard-coded)*
+
+### Contact Us
+![Contact Page](screenshots/contact_us.png)
+*Get in touch with us through our contact form or find our location and business hours. Send a message which can be displayed through admin dashboard*
+
+### Admin Dashboard
+![Admin Dashboard 1](screenshots/admin_1.png)
+*Comprehensive admin panel overview showing appointments, customers, and service management*
+
+![Admin Dashboard 2](screenshots/admin_2.png)
+*Appointment management interface with status tracking, notes, and expandable details*
+
+![Admin Dashboard 3](screenshots/admin_3.png)
+*Staff management section for adding, editing, and organizing salon employees*
+
+![Admin Dashboard 4](screenshots/admin_4.png)
+*Customer database with contact information and relationship tracking*
+
+![Admin Dashboard 5](screenshots/admin_5.png)
+*Service management with separate tabs for regular and premium services, including pricing and duration settings*
+
+<br>
+
 ---  
 
 ## 🛠️ Tech Stack
