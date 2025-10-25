@@ -187,6 +187,7 @@ Open your web browser and visit:
 - **Admin Panel**: `http://localhost:3000/admin.html`  
 <br>  
 <br>
+
 ---
 
 ## 🔑 Default Admin Credentials
