@@ -449,67 +449,107 @@ app.post('/api/appointments', (req, res) => {
         });
     };
 
-    if (staff_id === null) {
-        const busyQuery = `
-            SELECT staff_id
-            FROM Appointments
-            WHERE appointment_date = ?
-              AND appointment_time = ?
-              AND status = 'Scheduled'
-              AND staff_id IS NOT NULL
-        `;
-        db.query(busyQuery, [appointment_date, appointment_time], (busyErr, busyResults) => {
-            if (busyErr) {
-                console.error('Error checking busy staff:', busyErr);
-                res.status(500).json({ error: 'Failed to auto-assign staff' });
-                return;
-            }
-            const busyIds = busyResults.map(r => r.staff_id);
-            let freeQuery = 'SELECT staff_id FROM Staff';
-            let params = [];
-            if (busyIds.length) {
-                freeQuery += ' WHERE staff_id NOT IN (' + busyIds.map(() => '?').join(',') + ')';
-                params = busyIds;
-            }
-            freeQuery += ' ORDER BY staff_id LIMIT 1';
-            db.query(freeQuery, params, (freeErr, freeResults) => {
-                if (freeErr) {
-                    console.error('Error finding free staff:', freeErr);
+
+    db.query('SELECT duration_minutes FROM Services WHERE service_id = ?', [service_id], (durErr, durResults) => {
+        if (durErr || !durResults.length) {
+            console.error('Error fetching service duration:', durErr);
+            res.status(500).json({ error: 'Failed to fetch service details' });
+            return;
+        }
+
+        const requestedDuration = durResults[0].duration_minutes;
+        const [reqHour, reqMin] = appointment_time.split(':').map(Number);
+        const requestedTimeMinutes = reqHour * 60 + reqMin;
+        const requestedEndMinutes = requestedTimeMinutes + requestedDuration;
+
+        if (staff_id === null) {
+            const detailedQuery = `
+                SELECT a.staff_id, a.appointment_time, s.duration_minutes
+                FROM Appointments a
+                JOIN Services s ON a.service_id = s.service_id
+                WHERE a.appointment_date = ?
+                  AND a.status = 'Scheduled'
+                  AND a.staff_id IS NOT NULL
+            `;
+            db.query(detailedQuery, [appointment_date], (detailErr, appointments) => {
+                if (detailErr) {
+                    console.error('Error fetching appointment details:', detailErr);
                     res.status(500).json({ error: 'Failed to auto-assign staff' });
                     return;
                 }
-                if (!freeResults.length) {
-                    res.status(409).json({ error: 'No staff available at that time' });
+
+                const isStaffBusyAtTime = (staffId) => {
+                    const staffAppts = appointments.filter(a => a.staff_id === staffId);
+                    for (const apt of staffAppts) {
+                        const [aptHour, aptMin] = apt.appointment_time.split(':').map(Number);
+                        const aptStartMinutes = aptHour * 60 + aptMin;
+                        const aptEndMinutes = aptStartMinutes + apt.duration_minutes;
+                        
+                        if (
+                            (requestedTimeMinutes >= aptStartMinutes && requestedTimeMinutes < aptEndMinutes) ||
+                            (requestedEndMinutes > aptStartMinutes && requestedEndMinutes <= aptEndMinutes) ||
+                            (requestedTimeMinutes <= aptStartMinutes && requestedEndMinutes >= aptEndMinutes)
+                        ) {
+                            return true;
+                        }
+                    }
+                    return false;
+                };
+
+                db.query('SELECT staff_id FROM Staff ORDER BY staff_id', [], (staffErr, allStaff) => {
+                    if (staffErr) {
+                        console.error('Error fetching staff:', staffErr);
+                        res.status(500).json({ error: 'Failed to auto-assign staff' });
+                        return;
+                    }
+
+                    const availableStaff = allStaff.filter(s => !isStaffBusyAtTime(s.staff_id));
+                    
+                    if (!availableStaff.length) {
+                        res.status(409).json({ error: 'No staff available at that time' });
+                        return;
+                    }
+
+                    const assignedId = availableStaff[0].staff_id;
+                    console.log('Auto-assigned staff_id:', assignedId);
+                    proceedInsert(assignedId);
+                });
+            });
+        } else {
+            const staffApptsQuery = `
+                SELECT a.appointment_time, s.duration_minutes
+                FROM Appointments a
+                JOIN Services s ON a.service_id = s.service_id
+                WHERE a.appointment_date = ?
+                  AND a.staff_id = ?
+                  AND a.status = 'Scheduled'
+            `;
+            db.query(staffApptsQuery, [appointment_date, staff_id], (confErr, staffAppts) => {
+                if (confErr) {
+                    console.error('Error checking staff conflicts:', confErr);
+                    res.status(500).json({ error: 'Failed to verify staff availability' });
                     return;
                 }
-                const assignedId = freeResults[0].staff_id;
-                console.log('Auto-assigned staff_id:', assignedId);
-                proceedInsert(assignedId);
+
+                for (const apt of staffAppts) {
+                    const [aptHour, aptMin] = apt.appointment_time.split(':').map(Number);
+                    const aptStartMinutes = aptHour * 60 + aptMin;
+                    const aptEndMinutes = aptStartMinutes + apt.duration_minutes;
+
+                    if (
+                        (requestedTimeMinutes >= aptStartMinutes && requestedTimeMinutes < aptEndMinutes) ||
+                        (requestedEndMinutes > aptStartMinutes && requestedEndMinutes <= aptEndMinutes) ||
+                        (requestedTimeMinutes <= aptStartMinutes && requestedEndMinutes >= aptEndMinutes)
+                    ) {
+                        res.status(409).json({ error: 'Selected staff is already booked during that time' });
+                        return;
+                    }
+                }
+
+                proceedInsert(staff_id);
             });
-        });
-    } else {
-        const conflictQuery = `
-            SELECT appointment_id
-            FROM Appointments
-            WHERE appointment_date = ?
-              AND appointment_time = ?
-              AND staff_id = ?
-              AND status = 'Scheduled'
-            LIMIT 1
-        `;
-        db.query(conflictQuery, [appointment_date, appointment_time, staff_id], (confErr, confResults) => {
-            if (confErr) {
-                console.error('Error checking staff conflict:', confErr);
-                res.status(500).json({ error: 'Failed to verify staff availability' });
-                return;
-            }
-            if (confResults.length) {
-                res.status(409).json({ error: 'Selected staff is already booked for that slot' });
-                return;
-            }
-            proceedInsert(staff_id);
-        });
-    }
+        }
+    });
 });
 
 app.put('/api/appointments/:id/status', (req, res) => {
@@ -595,7 +635,7 @@ app.get('/api/available-slots', (req, res) => {
 });
 
 app.get('/api/available-staff', (req, res) => {
-    let { date, time } = req.query;
+    let { date, time, service_id } = req.query;
 
     if (!date || !time) {
         res.status(400).json({ error: 'date and time query params are required' });
@@ -612,39 +652,78 @@ app.get('/api/available-staff', (req, res) => {
         return;
     }
 
-    const bookedQuery = `
-        SELECT staff_id
-        FROM Appointments
-        WHERE appointment_date = ?
-          AND appointment_time = ?
-          AND status = 'Scheduled'
-          AND staff_id IS NOT NULL
-    `;
-    db.query(bookedQuery, [date, time], (bookErr, bookedResults) => {
-        if (bookErr) {
-            console.error('Error fetching booked staff:', bookErr);
-            res.status(500).json({ error: 'Failed to compute availability' });
+    const getServiceDuration = (callback) => {
+        if (!service_id) {
+            callback(null, 60); 
             return;
         }
-        const bookedIds = bookedResults.map(r => r.staff_id);
-        let staffQuery = 'SELECT staff_id, full_name, role FROM Staff';
-        let params = [];
-        if (bookedIds.length) {
-            staffQuery += ' WHERE staff_id NOT IN (' + bookedIds.map(() => '?').join(',') + ')';
-            params = bookedIds;
-        }
-        staffQuery += ' ORDER BY full_name';
-        db.query(staffQuery, params, (availErr, available) => {
-            if (availErr) {
-                console.error('Error fetching available staff list:', availErr);
-                res.status(500).json({ error: 'Failed to fetch available staff' });
+        db.query('SELECT duration_minutes FROM Services WHERE service_id = ?', [service_id], (err, results) => {
+            if (err || !results.length) {
+                callback(null, 60); 
+            } else {
+                callback(null, results[0].duration_minutes);
+            }
+        });
+    };
+
+    getServiceDuration((err, requestedDuration) => {
+        const appointmentsQuery = `
+            SELECT 
+                a.staff_id,
+                a.appointment_time,
+                s.duration_minutes
+            FROM Appointments a
+            JOIN Services s ON a.service_id = s.service_id
+            WHERE a.appointment_date = ?
+              AND a.status = 'Scheduled'
+              AND a.staff_id IS NOT NULL
+        `;
+        
+        db.query(appointmentsQuery, [date], (appErr, appointments) => {
+            if (appErr) {
+                console.error('Error fetching appointments:', appErr);
+                res.status(500).json({ error: 'Database error' });
                 return;
             }
-            res.json({
-                date,
-                time,
-                available_count: available.length,
-                staff: available
+            const [reqHour, reqMin] = time.split(':').map(Number);
+            const requestedTimeMinutes = reqHour * 60 + reqMin;
+            const requestedEndMinutes = requestedTimeMinutes + requestedDuration;
+
+            const isStaffBusy = (staffId) => {
+                const staffAppointments = appointments.filter(a => a.staff_id === staffId);
+                
+                for (const apt of staffAppointments) {
+                    const [aptHour, aptMin] = apt.appointment_time.split(':').map(Number);
+                    const aptStartMinutes = aptHour * 60 + aptMin;
+                    const aptEndMinutes = aptStartMinutes + apt.duration_minutes;
+
+                    if (
+                        (requestedTimeMinutes >= aptStartMinutes && requestedTimeMinutes < aptEndMinutes) ||
+                        (requestedEndMinutes > aptStartMinutes && requestedEndMinutes <= aptEndMinutes) ||
+                        (requestedTimeMinutes <= aptStartMinutes && requestedEndMinutes >= aptEndMinutes)
+                    ) {
+                        return true;
+                    }
+                }
+                return false;
+            };
+
+            const staffQuery = 'SELECT staff_id, full_name, role FROM Staff ORDER BY full_name';
+            db.query(staffQuery, [], (staffErr, allStaff) => {
+                if (staffErr) {
+                    console.error('Error fetching staff:', staffErr);
+                    res.status(500).json({ error: 'Database error' });
+                    return;
+                }
+
+                const availableStaff = allStaff.filter(staff => !isStaffBusy(staff.staff_id));
+                res.json({
+                    date,
+                    time,
+                    service_duration: requestedDuration,
+                    available_count: availableStaff.length,
+                    staff: availableStaff
+                });
             });
         });
     });
@@ -1017,4 +1096,5 @@ app.delete('/api/customers/:id', (req, res) => {
 
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
+    console.log(`\n🌐 Visit: http://localhost:${PORT}\n`);
 });

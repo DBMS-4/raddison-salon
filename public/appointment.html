@@ -741,6 +741,12 @@
               </div>
             </div>
             <div class="form-group">
+              <label for="staff">Preferred Staff Member</label>
+              <select id="staff" name="staff">
+                <option value="">Auto Assign (Any Available Staff)</option>
+              </select>
+            </div>
+            <div class="form-group">
               <label for="notes">Special Requests or Notes</label>
               <textarea
                 id="notes"
@@ -908,28 +914,36 @@
         if (!staffSelect) return;
         const date = document.getElementById("date")?.value;
         let time = toHHMMSS(document.getElementById("time")?.value);
+        const serviceId = document.getElementById("service")?.value;
         try {
           let url = "/api/staff";
-          if (date && time)
+          if (date && time && serviceId)
             url = `/api/available-staff?date=${encodeURIComponent(
               date
-            )}&time=${encodeURIComponent(time)}`;
+            )}&time=${encodeURIComponent(time)}&service_id=${encodeURIComponent(serviceId)}`;
           const r = await fetch(url);
           if (!r.ok) throw new Error("Failed to fetch staff");
           const payload = await r.json();
           const staff = Array.isArray(payload) ? payload : payload.staff;
           staffSelect.innerHTML =
-            '<option value="">Any available staff</option>';
-          (staff || []).forEach((m) => {
-            const o = document.createElement("option");
-            o.value = m.staff_id;
-            o.textContent = `${m.full_name}${m.role ? " — " + m.role : ""}`;
-            staffSelect.appendChild(o);
-          });
+            '<option value="">Auto Assign (Any Available Staff)</option>';
+          if (staff && staff.length > 0) {
+            staff.forEach((m) => {
+              const o = document.createElement("option");
+              o.value = m.staff_id;
+              o.textContent = `${m.full_name}${m.role ? " — " + m.role : ""}`;
+              staffSelect.appendChild(o);
+            });
+          } else if (date && time) {
+            const noStaffOption = document.createElement("option");
+            noStaffOption.value = "";
+            noStaffOption.textContent = "No staff available at this time - Auto Assign will find next available if possible";
+            staffSelect.appendChild(noStaffOption);
+          }
         } catch (e) {
           console.error(e);
           staffSelect.innerHTML =
-            '<option value="">Error loading staff</option>';
+            '<option value="">Auto Assign (Any Available Staff)</option>';
         }
       }
 
@@ -940,6 +954,7 @@
         setActiveNavLink();
         loadServices();
         loadStaff();
+        document.getElementById("service")?.addEventListener("change", loadStaff);
         document.getElementById("date")?.addEventListener("change", loadStaff);
         document.getElementById("time")?.addEventListener("change", loadStaff);
 
@@ -971,9 +986,12 @@
             if (!cr.ok) throw new Error("Failed to create customer");
             const { customer_id } = await cr.json();
 
+            const staffValue = fd.get("staff");
+            const staff_id = staffValue && staffValue !== "" ? parseInt(staffValue) : null;
+
             const appt = {
               customer_id,
-              staff_id: null,
+              staff_id: staff_id,
               service_id: fd.get("service"),
               appointment_date: fd.get("date"),
               appointment_time: time,
